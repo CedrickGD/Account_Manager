@@ -39,10 +39,30 @@ COLOR_STATUS_INFO = "#8BE9FD"
 COLOR_STATUS_SUCCESS = "#50FA7B"
 COLOR_STATUS_ERROR = "#FF5555"
 
+THEMES = {
+    "dark": {
+        "BG": "#121218",
+        "TEXT": "#F8F8F2",
+        "TEXT_SECONDARY": "#BFBFBF",
+        "PANEL": "rgba(30, 30, 40, 180)",
+        "PANEL_LIGHTER": "rgba(40, 40, 50, 200)",
+        "PANEL_SELECTED": "rgba(60, 50, 90, 200)"
+    },
+    "light": {
+        "BG": "#f0f0f0",
+        "TEXT": "#2a2a2a",
+        "TEXT_SECONDARY": "#555555",
+        "PANEL": "rgba(255, 255, 255, 220)",
+        "PANEL_LIGHTER": "rgba(250, 250, 250, 240)",
+        "PANEL_SELECTED": "rgba(230, 230, 255, 220)"
+    }
+}
+
 
 class ModernButton(QPushButton):
     def __init__(self, text, parent=None, primary=True):
         super().__init__(text, parent)
+        self.current_theme = "dark"
         self.primary = primary
         self._base_color = COLOR_PRIMARY if primary else COLOR_SECONDARY
         self._hover_color = COLOR_PRIMARY_HOVER if primary else COLOR_SECONDARY_HOVER
@@ -308,14 +328,9 @@ class AccountManager(QWidget):
         app_title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
         app_title.setStyleSheet(f"color: {COLOR_ACCENT};")
         header_layout.addWidget(app_title)
-
-        # Current database indicator
-        self.current_db_indicator = QLabel("")
-        self.current_db_indicator.setFont(QFont("Segoe UI", 12))
-        self.current_db_indicator.setStyleSheet(
-            f"color: {COLOR_TEXT_SECONDARY};")
-        header_layout.addWidget(self.current_db_indicator)
-
+        # Title placed left side
+        header_layout.addWidget(app_title)
+        # Header layout with spacing
         header_layout.addStretch()
 
         # Status Label in header
@@ -323,6 +338,20 @@ class AccountManager(QWidget):
         self.status_label.setStyleSheet(
             f"color: {COLOR_TEXT_SECONDARY}; font-style: italic;")
         header_layout.addWidget(self.status_label)
+
+        # Toggle button placed right side
+        self.theme_toggle = ModernButton("🌙", primary=False)
+        self.theme_toggle.setFixedSize(QSize(40, 30))
+        self.theme_toggle.setToolTip("Toggle Dark/Light Mode")
+        self.theme_toggle.clicked.connect(self.toggle_theme)
+        header_layout.addWidget(self.theme_toggle)
+
+        # Current database indicator
+        self.current_db_indicator = QLabel("")
+        self.current_db_indicator.setFont(QFont("Segoe UI", 12))
+        self.current_db_indicator.setStyleSheet(
+            f"color: {COLOR_TEXT_SECONDARY};")
+        header_layout.addWidget(self.current_db_indicator)
 
         main_layout.addWidget(header_panel)
 
@@ -405,10 +434,6 @@ class AccountManager(QWidget):
         input_section = QFrame()
         input_layout = QVBoxLayout(input_section)
         input_layout.setContentsMargins(0, 10, 0, 0)
-
-        input_header = QLabel("Add New Account")
-        input_header.setFont(QFont("Segoe UI", 12))
-        input_layout.addWidget(input_header)
 
         name_layout = QVBoxLayout()
         name_label = QLabel("Account Name")
@@ -520,6 +545,167 @@ class AccountManager(QWidget):
 
         # Initial search for database files
         self.scan_for_database_files()
+
+    def toggle_theme(self):
+        print("toggle theme called")
+        self.current_theme = "light" if self.current_theme == "dark" else "dark"
+        self.theme_toggle.setText(
+            "☀️" if self.current_theme == "dark" else "🌙")
+        self.apply_theme()
+
+        # Force all custom widgets to update their styles
+        for widget in self.findChildren(QWidget):
+            if isinstance(widget, ModernButton) or isinstance(widget, DangerButton):
+                widget.update_style()
+            elif isinstance(widget, ModernPanel):
+                widget.setStyleSheet(f"""
+                                     ModernPanel {{
+                                            background-color: {COLOR_PANEL};
+                                            border-radius: 12px;
+                                            border: 1px solid rgba(80, 80, 100, 100);
+                                        }}
+                                        """)
+
+    def apply_theme(self):
+        if self.current_theme not in THEMES:
+            self.set_status("Unknown theme: reverting to dark", "error")
+            self.current_theme = "dark"
+
+        theme = THEMES[self.current_theme]
+
+        # Update global colors used in stylesheet
+        global COLOR_BG, COLOR_TEXT, COLOR_TEXT_SECONDARY, COLOR_PANEL, COLOR_PANEL_LIGHTER, COLOR_PANEL_SELECTED
+        COLOR_BG = theme["BG"]
+        COLOR_TEXT = theme["TEXT"]
+        COLOR_TEXT_SECONDARY = theme["TEXT_SECONDARY"]
+        COLOR_PANEL = theme["PANEL"]
+        COLOR_PANEL_LIGHTER = theme["PANEL_LIGHTER"]
+        COLOR_PANEL_SELECTED = theme["PANEL_SELECTED"]
+
+        print("current theme:", self.current_theme)
+        print("available themes:", THEMES.keys())
+
+        if self.current_theme not in THEMES:
+            print("Error: Theme not found")
+            return
+
+        # Update Stylesheet
+        try:
+            self.setStyleSheet(self.generate_stylesheet())
+        except Exception as e:
+            print("Error applying Stylesheet:", e)
+            self.set_status(f"Style Error: {e}", "error")
+        # Repaint the window to apply new colors
+        self.repaint()
+
+    def generate_stylesheet(self):
+        """Generates the stylesheet based on the current theme"""
+        return f"""
+            QWidget {{
+                background-color: {COLOR_BG};
+                color: {COLOR_TEXT};
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }}
+            QLabel {{
+                color: {COLOR_TEXT};
+            }}
+            QLineEdit {{
+                background-color: {COLOR_PANEL_LIGHTER};
+                color: {COLOR_TEXT};
+                border: 1px solid rgba(138, 43, 226, 150);
+                border-radius: 8px;
+                padding: 8px;
+                font-size: 14px;
+            }}
+            QLineEdit:focus {{
+                border: 2px solid {COLOR_PRIMARY};
+            }}
+            QTextEdit {{
+                background-color: {COLOR_PANEL_LIGHTER};
+                color: {COLOR_TEXT};
+                border: 1px solid rgba(138, 43, 226, 150);
+                border-radius: 8px;
+                font-size: 14px;
+                padding: 8px;
+            }}
+            QListWidget {{
+                background-color: {COLOR_PANEL_LIGHTER};
+                color: {COLOR_TEXT};
+                border: 1px solid rgba(138, 43, 226, 150);
+                border-radius: 8px;
+                font-size: 14px;
+                padding: 5px;
+            }}
+            QListWidget::item {{
+                border-radius: 5px;
+                padding: 8px;
+                margin: 2px;
+            }}
+            QListWidget::item:hover {{
+                background-color: rgba(138, 43, 226, 30);
+            }}
+            QListWidget::item:selected {{
+                background-color: {COLOR_PANEL_SELECTED};
+                color: {COLOR_TEXT};
+                border-left: 3px solid {COLOR_ACCENT};
+            }}
+            QComboBox {{
+                background-color: {COLOR_PANEL_LIGHTER};
+                color: {COLOR_TEXT};
+                border: 1px solid rgba(138, 43, 226, 150);
+                border-radius: 8px;
+                padding: 8px;
+                padding-right: 20px;
+                font-size: 14px;
+                min-height: 25px;
+            }}
+            QComboBox:hover {{
+                border: 1px solid {COLOR_PRIMARY};
+            }}
+            QComboBox::drop-down {{
+                border: 0px;
+                width: 20px;
+            }}
+            QComboBox::down-arrow {{
+                image: url(down_arrow.png);
+                width: 12px;
+                height: 12px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {COLOR_PANEL};
+                color: {COLOR_TEXT};
+                selection-background-color: {COLOR_PANEL_SELECTED};
+                selection-color: {COLOR_TEXT};
+                border: 1px solid {COLOR_PRIMARY};
+                border-radius: 8px;
+                padding: 5px;
+            }}
+            QScrollBar:vertical {{
+                border: none;
+                background-color: rgba(40, 40, 50, 100);
+                width: 10px;
+                margin: 0px;
+                border-radius: 5px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: rgba(138, 43, 226, 150);
+                min-height: 20px;
+                border-radius: 5px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: rgba(154, 59, 242, 180);
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            QSplitter::handle {{
+                background-color: rgba(138, 43, 226, 50);
+                width: 2px;
+            }}
+            QSplitter::handle:hover {{
+                background-color: {COLOR_PRIMARY};
+            }}
+        """
 
     def init_snowflakes(self):
         width = self.width()
@@ -765,11 +951,6 @@ class AccountManager(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Deletion Error",
                                      f"Could not delete database: {e}")
-
-    def add_account(self):
-        """Adds an account to the current database"""
-        if not self.current_db_file:
-            QMessageBox.warning
 
     def add_account(self):
         """Adds an account to the current database"""

@@ -1,0 +1,22 @@
+-------------------------------------------------------------
+Baisc Readme Template:
+-------------------------------------------------------------
+# Account Manager
+
+A modern PyQt6-based password/account manager.
+
+## Features
+- Password generator
+- Secure database storage
+- Clean modern UI
+
+## Installation
+```bash
+pip install -r requirements.txt
+
+-------------------------------------------------------------
+EVERY SINGLE COMMIT STEPS: (readme as sample file / add .)
+-------------------------------------------------------------
+git add README.md
+git commit -m "Add README.md"
+git push origin main
