@@ -42,6 +42,8 @@ COLOR_STATUS_ERROR = "#FF5555"
 THEMES = {
     "dark": {
         "BG": "#121218",
+        "BG_GRADIENT_TOP": "#1A1A24",
+        "BG_GRADIENT_BOTTOM": "#0D0D12",
         "TEXT": "#F8F8F2",
         "TEXT_SECONDARY": "#BFBFBF",
         "PANEL": "rgba(30, 30, 40, 180)",
@@ -50,6 +52,8 @@ THEMES = {
     },
     "light": {
         "BG": "#f0f0f0",
+        "BG_GRADIENT_TOP": "#ffffff",
+        "BG_GRADIENT_BOTTOM": "#e0e0e0",
         "TEXT": "#2a2a2a",
         "TEXT_SECONDARY": "#555555",
         "PANEL": "rgba(255, 255, 255, 220)",
@@ -116,6 +120,9 @@ class ModernButton(QPushButton):
             self.update_style()
         super().mouseReleaseEvent(event)
 
+    def update_theme_colors(self, theme_name):
+        self.current_theme = theme_name
+
 
 class DangerButton(ModernButton):
     def __init__(self, text, parent=None):
@@ -164,12 +171,24 @@ class ModernPanel(QFrame):
         shadow.setOffset(0, 5)
         self.setGraphicsEffect(shadow)
 
+    def update_style(self, panel_color):
+        self.setStyleSheet(f"""
+            ModernPanel {{
+                background-color: {panel_color};
+                border-radius: 12px;
+                border: 1px solid rgba(80, 80, 100, 100);
+            }}
+        """)
+
 
 class AccountManager(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Account Manager")
         self.setGeometry(100, 100, 900, 600)  # Larger window for better UI
+
+        # Current theme tracking
+        self.current_theme = "dark"
 
         # Set window style
         self.setStyleSheet(f"""
@@ -312,9 +331,9 @@ class AccountManager(QWidget):
         # Initialize snowflakes animation
         self.snowflakes = []
         self.init_snowflakes()
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_snowflakes)
-        self.timer.start(20)
+        self.snowflake_timer = QTimer(self)
+        self.snowflake_timer.timeout.connect(self.update_snowflakes)
+        self.snowflake_timer.start(20)
 
         # Main layout with splitter for resizable panels
         main_layout = QVBoxLayout(self)
@@ -322,12 +341,23 @@ class AccountManager(QWidget):
 
         # Create header for the app
         header_panel = ModernPanel()
+        header_panel.setStyleSheet(f"""
+            ModernPanel {{
+                background-color: {COLOR_PANEL};
+                border-radius: 12px;
+                border: 1px solid rgba(80, 80, 100, 100);
+            }}
+            QLabel {{
+                background: transparent;
+            }}
+        """)
         header_layout = QHBoxLayout(header_panel)
 
         app_title = QLabel("Vaultix Account Manager")
         app_title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
-        app_title.setStyleSheet(f"color: {COLOR_ACCENT};")
-        header_layout.addWidget(app_title)
+        app_title.setStyleSheet(
+            f"color: {COLOR_ACCENT}; background: transparent;")
+
         # Title placed left side
         header_layout.addWidget(app_title)
         # Header layout with spacing
@@ -336,7 +366,7 @@ class AccountManager(QWidget):
         # Status Label in header
         self.status_label = QLabel()
         self.status_label.setStyleSheet(
-            f"color: {COLOR_TEXT_SECONDARY}; font-style: italic;")
+            f"color: {COLOR_TEXT_SECONDARY}; font-style: italic; background: transparent;")
         header_layout.addWidget(self.status_label)
 
         # Toggle button placed right side
@@ -360,6 +390,7 @@ class AccountManager(QWidget):
 
         # Left Panel
         left_panel = ModernPanel()
+        self.left_panel = left_panel  # Store reference for theme updates
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(10, 10, 10, 10)
 
@@ -474,6 +505,7 @@ class AccountManager(QWidget):
 
         # Right Panel (Account Details)
         right_panel = ModernPanel()
+        self.right_panel = right_panel  # Store reference for theme updates
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(10, 10, 10, 10)
 
@@ -483,6 +515,7 @@ class AccountManager(QWidget):
 
         # Container for details
         details_container = QFrame()
+        self.details_container = details_container  # Store reference for theme updates
         details_container.setStyleSheet(f"""
             QFrame {{
                 background-color: {COLOR_PANEL_LIGHTER};
@@ -547,24 +580,10 @@ class AccountManager(QWidget):
         self.scan_for_database_files()
 
     def toggle_theme(self):
-        print("toggle theme called")
         self.current_theme = "light" if self.current_theme == "dark" else "dark"
         self.theme_toggle.setText(
             "☀️" if self.current_theme == "dark" else "🌙")
         self.apply_theme()
-
-        # Force all custom widgets to update their styles
-        for widget in self.findChildren(QWidget):
-            if isinstance(widget, ModernButton) or isinstance(widget, DangerButton):
-                widget.update_style()
-            elif isinstance(widget, ModernPanel):
-                widget.setStyleSheet(f"""
-                                     ModernPanel {{
-                                            background-color: {COLOR_PANEL};
-                                            border-radius: 12px;
-                                            border: 1px solid rgba(80, 80, 100, 100);
-                                        }}
-                                        """)
 
     def apply_theme(self):
         if self.current_theme not in THEMES:
@@ -574,27 +593,45 @@ class AccountManager(QWidget):
         theme = THEMES[self.current_theme]
 
         # Update global colors used in stylesheet
-        global COLOR_BG, COLOR_TEXT, COLOR_TEXT_SECONDARY, COLOR_PANEL, COLOR_PANEL_LIGHTER, COLOR_PANEL_SELECTED
+        global COLOR_BG, COLOR_BG_GRADIENT_TOP, COLOR_BG_GRADIENT_BOTTOM
+        global COLOR_TEXT, COLOR_TEXT_SECONDARY, COLOR_PANEL, COLOR_PANEL_LIGHTER, COLOR_PANEL_SELECTED
         COLOR_BG = theme["BG"]
+        COLOR_BG_GRADIENT_TOP = theme["BG_GRADIENT_TOP"]
+        COLOR_BG_GRADIENT_BOTTOM = theme["BG_GRADIENT_BOTTOM"]
         COLOR_TEXT = theme["TEXT"]
         COLOR_TEXT_SECONDARY = theme["TEXT_SECONDARY"]
         COLOR_PANEL = theme["PANEL"]
         COLOR_PANEL_LIGHTER = theme["PANEL_LIGHTER"]
         COLOR_PANEL_SELECTED = theme["PANEL_SELECTED"]
 
-        print("current theme:", self.current_theme)
-        print("available themes:", THEMES.keys())
-
-        if self.current_theme not in THEMES:
-            print("Error: Theme not found")
-            return
-
         # Update Stylesheet
         try:
             self.setStyleSheet(self.generate_stylesheet())
+
+            # Update ModernPanel styles
+            self.left_panel.update_style(COLOR_PANEL)
+            self.right_panel.update_style(COLOR_PANEL)
+
+            # Update details container
+            self.details_container.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {COLOR_PANEL_LIGHTER};
+                    border-radius: 8px;
+                    padding: 5px;
+                }}
+            """)
+
+            # Update buttons
+            for widget in self.findChildren(ModernButton):
+                widget.update_style()
+
+            # Make sure current account details are displayed with new colors
+            self.display_account_details()
+
         except Exception as e:
             print("Error applying Stylesheet:", e)
             self.set_status(f"Style Error: {e}", "error")
+
         # Repaint the window to apply new colors
         self.repaint()
 
@@ -698,6 +735,24 @@ class AccountManager(QWidget):
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
             }}
+            QScrollBar:horizontal {{
+                border: none;
+                background-color: rgba(40, 40, 50, 100);
+                height: 10px;
+                margin: 0px;
+                border-radius: 5px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background-color: rgba(138, 43, 226, 150);
+                min-width: 20px;
+                border-radius: 5px;
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background-color: rgba(154, 59, 242, 180);
+            }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
             QSplitter::handle {{
                 background-color: rgba(138, 43, 226, 50);
                 width: 2px;
@@ -721,9 +776,11 @@ class AccountManager(QWidget):
         ]
 
     def resizeEvent(self, event):
+        super().resizeEvent(event)
         self.init_snowflakes()
 
     def paintEvent(self, event):
+        super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -755,7 +812,8 @@ class AccountManager(QWidget):
             color = COLOR_STATUS_INFO
 
         self.status_label.setText(message)
-        self.status_label.setStyleSheet(f"color: {color}; font-style: italic;")
+        self.status_label.setStyleSheet(
+            f"color: {color}; font-style: italic; background: transparent;")
 
         # Clear any existing animation timer
         if self.status_animation is not None:
@@ -800,7 +858,7 @@ class AccountManager(QWidget):
                         found_files.append((file, len(accounts)))
                         # Store accounts in the all_db_accounts dictionary
                         self.all_db_accounts[file] = accounts
-                except:
+                except Exception as e:
                     pass  # Ignore non-compatible files
 
         # Add found files to dropdown
@@ -809,8 +867,13 @@ class AccountManager(QWidget):
                 self.db_file_selector.addItem(f"{file} ({count} accounts)")
 
             # Try to restore previous selection
-            index = self.db_file_selector.findText(
-                previous_selection, Qt.MatchFlag.MatchExactly)
+            index = -1
+            for i in range(self.db_file_selector.count()):
+                item_text = self.db_file_selector.itemText(i)
+                if item_text.startswith(previous_selection.split(" (")[0]):
+                    index = i
+                    break
+
             if index >= 0:
                 self.db_file_selector.setCurrentIndex(index)
             else:
@@ -823,6 +886,7 @@ class AccountManager(QWidget):
             self.all_db_accounts = {}
             self.account_list.clear()
             self.details_view.clear()
+            self.current_db_indicator.setText("")
             self.set_status("No database files found", "error")
 
         # Release signals
@@ -860,6 +924,7 @@ class AccountManager(QWidget):
             self.current_db_file = None
             self.account_list.clear()
             self.current_db_indicator.setText("")
+            self.details_view.clear()
             return
 
         # Extract filename from ComboBox text (Format: "filename (X accounts)")
@@ -879,6 +944,10 @@ class AccountManager(QWidget):
         name, ok = QInputDialog.getText(
             self, "New Database", "Enter filename:", QLineEdit.EchoMode.Normal, "")
         if ok and name:
+            # Add .vault extension if not provided
+            if not name.endswith('.vault') and not '.' in name:
+                name = name + '.vault'
+
             # Ensure the file doesn't already exist
             file_path = os.path.join(DATABASE_DIR, name)
             if os.path.exists(file_path):
@@ -960,21 +1029,45 @@ class AccountManager(QWidget):
 
         name = self.name_input.text()
         password = self.pass_input.text()
-        if name and password:
-            # Add account to current database
-            self.all_db_accounts[self.current_db_file][name] = password
-            self.save_accounts(self.current_db_file)
-            self.load_account_list()
-            self.name_input.clear()
-            self.pass_input.clear()
 
-            # Update the filename in dropdown to show new account count
-            self.scan_for_database_files()
-
-            self.set_status(f"Account '{name}' added successfully", "success")
-        else:
+        if not name:
             QMessageBox.warning(self, "Input Error",
-                                "Please enter both account name and password.")
+                                "Please enter an account name.")
+            return
+
+        if not password:
+            QMessageBox.warning(self, "Input Error",
+                                "Please enter a password.")
+            return
+
+        # Check if account already exists
+        if name in self.all_db_accounts[self.current_db_file]:
+            confirm = QMessageBox.question(
+                self,
+                "Account Exists",
+                f"An account named '{name}' already exists. Do you want to update it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if confirm != QMessageBox.StandardButton.Yes:
+                return
+
+        # Add account to current database
+        self.all_db_accounts[self.current_db_file][name] = password
+        self.save_accounts(self.current_db_file)
+        self.load_account_list()
+        self.name_input.clear()
+        self.pass_input.clear()
+
+        # Update the filename in dropdown to show new account count
+        self.scan_for_database_files()
+
+        # Select the newly added account
+        for i in range(self.account_list.count()):
+            if self.account_list.item(i).text() == name:
+                self.account_list.setCurrentRow(i)
+                break
+
+        self.set_status(f"Account '{name}' added successfully", "success")
 
     def del_account(self):
         """Deletes the selected account"""
