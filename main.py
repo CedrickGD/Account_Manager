@@ -587,6 +587,9 @@ class AccountManager(QWidget):
         """Searches the directory for compatible database files"""
         # Save previous selection
         previous_selection = self.db_file_selector.currentText()
+        selected_account = None
+        if self.account_list.currentItem():
+            selected_account = self.account_list.currentItem().text()
 
         # Update status
         self.set_status("Searching for database files...", "info")
@@ -641,6 +644,13 @@ class AccountManager(QWidget):
 
         # Load accounts for current file
         self.change_database_file()
+
+        # Attempts to select the previously selected account again
+        if selected_account:
+            for i in range(self.account_list.count()):
+                if self.account_list.item(i).text() == selected_account:
+                    self.account_list.setCurrentRow(i)
+                    break
 
     def try_load_database(self, file_path):
         """Attempts to load a file as a database"""
