@@ -5,13 +5,14 @@ from PyQt6.QtWidgets import (
     QFrame, QSplitter, QScrollArea
 )
 from PyQt6.QtGui import QPainter, QBrush, QColor, QFont, QIcon, QLinearGradient, QPen
-from PyQt6.QtCore import Qt, QTimer, QPoint, QSize, QPropertyAnimation, QEasingCurve, QRect, pyqtProperty
+from PyQt6.QtCore import Qt, QTimer, QPoint, QSize, QPropertyAnimation, QEasingCurve, QRect, pyqtProperty, QUrl
 import sys
 import random
 import json
 import base64
 import os
 import time
+import webbrowser
 
 # Directory scanning instead of fixed file
 DATABASE_DIR = os.path.dirname(os.path.abspath(__file__)) or os.getcwd()
@@ -185,10 +186,13 @@ class AccountManager(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Account Manager")
-        self.setGeometry(100, 100, 900, 600)  # Larger window for better UI
+        self.setGeometry(100, 100, 1000, 600)  # Larger window for better UI
 
         # Current theme tracking
         self.current_theme = "dark"
+
+        # Store current website URL
+        self.current_website_url = None
 
         # Set window style
         self.setStyleSheet(f"""
@@ -475,6 +479,27 @@ class AccountManager(QWidget):
         name_layout.addWidget(self.name_input)
         input_layout.addLayout(name_layout)
 
+        # Add email field (optional)
+        email_layout = QVBoxLayout()
+        email_label = QLabel("Email (Optional)")
+        email_layout.addWidget(email_label)
+
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("Enter email address")
+        email_layout.addWidget(self.email_input)
+        input_layout.addLayout(email_layout)
+
+        # Add website field (optional)
+        website_layout = QVBoxLayout()
+        website_label = QLabel("Website URL (Optional)")
+        website_layout.addWidget(website_label)
+
+        self.website_input = QLineEdit()
+        self.website_input.setPlaceholderText(
+            "Enter website URL (e.g., https://example.com)")
+        website_layout.addWidget(self.website_input)
+        input_layout.addLayout(website_layout)
+
         pass_layout = QVBoxLayout()
         pass_label = QLabel("Password")
         pass_layout.addWidget(pass_label)
@@ -540,7 +565,13 @@ class AccountManager(QWidget):
         self.copy_button.clicked.connect(self.copy_details)
         details_buttons_layout.addWidget(self.copy_button)
 
-        # New edit password button
+        # Website button
+        self.website_button = ModernButton("Open Website", primary=True)
+        self.website_button.clicked.connect(self.open_website)
+        self.website_button.setVisible(False)  # Initially hidden
+        details_buttons_layout.addWidget(self.website_button)
+
+        # Edit password button
         self.edit_button = ModernButton("Edit Password")
         self.edit_button.clicked.connect(self.edit_password)
         details_buttons_layout.addWidget(self.edit_button)
@@ -831,6 +862,9 @@ class AccountManager(QWidget):
         """Searches the directory for compatible database files"""
         # Save previous selection
         previous_selection = self.db_file_selector.currentText()
+        previous_file = previous_selection.split(
+            " (")[0] if " (" in previous_selection else previous_selection
+
         selected_account = None
         if self.account_list.currentItem():
             selected_account = self.account_list.currentItem().text()
@@ -870,7 +904,9 @@ class AccountManager(QWidget):
             index = -1
             for i in range(self.db_file_selector.count()):
                 item_text = self.db_file_selector.itemText(i)
-                if item_text.startswith(previous_selection.split(" (")[0]):
+                file_name = item_text.split(
+                    " (")[0] if " (" in item_text else item_text
+                if file_name == previous_file:
                     index = i
                     break
 
@@ -887,6 +923,7 @@ class AccountManager(QWidget):
             self.account_list.clear()
             self.details_view.clear()
             self.current_db_indicator.setText("")
+            self.website_button.setVisible(False)
             self.set_status("No database files found", "error")
 
         # Release signals
@@ -1029,6 +1066,8 @@ class AccountManager(QWidget):
 
         name = self.name_input.text()
         password = self.pass_input.text()
+        email = self.email_input.text()  # Get email value (optional)
+        website = self.website_input.text()  # Get website value (optional)
 
         if not name:
             QMessageBox.warning(self, "Input Error",
@@ -1051,11 +1090,23 @@ class AccountManager(QWidget):
             if confirm != QMessageBox.StandardButton.Yes:
                 return
 
+        # Create account data dictionary with all fields
+        account_data = {
+            "password": password,
+            "email": email,
+            "website": website,
+            "created": time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+
         # Add account to current database
-        self.all_db_accounts[self.current_db_file][name] = password
+        self.all_db_accounts[self.current_db_file][name] = account_data
         self.save_accounts(self.current_db_file)
         self.load_account_list()
+
+        # Clear input fields
         self.name_input.clear()
+        self.email_input.clear()
+        self.website_input.clear()
         self.pass_input.clear()
 
         # Update the filename in dropdown to show new account count
@@ -1123,11 +1174,32 @@ class AccountManager(QWidget):
         if not selected_items:
             self.details_view.clear()
             self.details_label.setText("Account Details")
+            self.website_button.setVisible(False)
+            self.current_website_url = None
             return
 
         account_name = selected_items[0].text()
         if self.current_db_file and account_name in self.all_db_accounts[self.current_db_file]:
-            password = self.all_db_accounts[self.current_db_file][account_name]
+            account_data = self.all_db_accounts[self.current_db_file][account_name]
+
+            # Handle both old and new data format
+            if isinstance(account_data, str):
+                # Old format: password only
+                password = account_data
+                email = ""
+                website = ""
+                created_time = time.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                # New format: dictionary with all fields
+                password = account_data.get("password", "")
+                email = account_data.get("email", "")
+                website = account_data.get("website", "")
+                created_time = account_data.get(
+                    "created", time.strftime('%Y-%m-%d %H:%M:%S'))
+
+            # Store current website URL and update button visibility
+            self.current_website_url = website
+            self.website_button.setVisible(bool(website))
 
             # Update details view with formatted HTML
             self.details_view.setHtml(f"""
@@ -1140,14 +1212,37 @@ class AccountManager(QWidget):
                 </style>
                 <div class="label">Account Name:</div>
                 <div class="value">{account_name}</div>
+                
                 <div class="label">Password:</div>
                 <div class="value password">{password}</div>
+                
+                <div class="label">Email:</div>
+                <div class="value">{email or "Not provided"}</div>
+                
+                <div class="label">Website:</div>
+                <div class="value">{website or "Not provided"}</div>
+                
                 <div class="label">Creation Time:</div>
-                <div class="value">{time.strftime('%Y-%m-%d %H:%M:%S')}</div>
+                <div class="value">{created_time}</div>
             """)
 
             # Update header
             self.details_label.setText(f"Account Details: {account_name}")
+
+    def open_website(self):
+        """Open the website URL in the default browser"""
+        if self.current_website_url:
+            url = self.current_website_url
+
+            # Add https:// prefix if missing
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+
+            try:
+                webbrowser.open(url)
+                self.set_status(f"Opening website: {url}", "success")
+            except Exception as e:
+                self.set_status(f"Could not open website: {e}", "error")
 
     def save_accounts(self, filename):
         """Saves the accounts to the database file"""
@@ -1181,10 +1276,29 @@ class AccountManager(QWidget):
 
         account_name = selected_items[0].text()
         if self.current_db_file and account_name in self.all_db_accounts[self.current_db_file]:
-            password = self.all_db_accounts[self.current_db_file][account_name]
+            account_data = self.all_db_accounts[self.current_db_file][account_name]
+
+            # Handle both old and new data format
+            if isinstance(account_data, str):
+                # Old format: password only
+                password = account_data
+                email = ""
+                website = ""
+            else:
+                # New format: dictionary with all fields
+                password = account_data.get("password", "")
+                email = account_data.get("email", "")
+                website = account_data.get("website", "")
 
             # Copy account and password to clipboard
             clipboard_text = f"Account: {account_name}\nPassword: {password}"
+
+            # Add email and website if available
+            if email:
+                clipboard_text += f"\nEmail: {email}"
+            if website:
+                clipboard_text += f"\nWebsite: {website}"
+
             QApplication.clipboard().setText(clipboard_text)
 
             # Show animation effect for confirmation
@@ -1212,6 +1326,52 @@ class AccountManager(QWidget):
             return
 
         account_name = selected_items[0].text()
+        if self.current_db_file and account_name in self.all_db_accounts[self.current_db_file]:
+            account_data = self.all_db_accounts[self.current_db_file][account_name]
+
+            # Handle both old and new data format
+            if isinstance(account_data, str):
+                # Old format: password only
+                current_password = account_data
+                current_email = ""
+                current_website = ""
+            else:
+                # New format: dictionary with all fields
+                current_password = account_data.get("password", "")
+                current_email = account_data.get("email", "")
+                current_website = account_data.get("website", "")
+
+            # Ask for new password
+            new_password, ok = QInputDialog.getText(
+                self,
+                "Edit Password",
+                f"Enter new password for '{account_name}':",
+                QLineEdit.EchoMode.Password,
+                current_password
+            )
+
+            if ok and new_password:
+                # Update account data
+                if isinstance(account_data, str):
+                    # Convert old format to new format
+                    self.all_db_accounts[self.current_db_file][account_name] = {
+                        "password": new_password,
+                        "email": current_email,
+                        "website": current_website,
+                        "created": time.strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                else:
+                    # Update password in existing dictionary
+                    account_data["password"] = new_password
+                    self.all_db_accounts[self.current_db_file][account_name] = account_data
+
+                # Save and update display
+                self.save_accounts(self.current_db_file)
+                self.display_account_details()
+
+                # Show confirmation
+                self.set_status(
+                    f"Password for '{account_name}' updated", "success")
         if self.current_db_file and account_name in self.all_db_accounts[self.current_db_file]:
             current_password = self.all_db_accounts[self.current_db_file][account_name]
 
