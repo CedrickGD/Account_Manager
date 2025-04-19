@@ -324,7 +324,7 @@ class AccountManager(QWidget):
         header_panel = ModernPanel()
         header_layout = QHBoxLayout(header_panel)
 
-        app_title = QLabel("Modern Account Manager")
+        app_title = QLabel("Vaultix Account Manager")
         app_title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
         app_title.setStyleSheet(f"color: {COLOR_ACCENT};")
         header_layout.addWidget(app_title)
