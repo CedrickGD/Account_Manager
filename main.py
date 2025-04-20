@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QLineEdit, QListWidget, QMessageBox, QTextEdit,
     QComboBox, QListWidgetItem, QInputDialog, QGraphicsDropShadowEffect,
-    QFrame, QSplitter, QScrollArea
+    QFrame, QSplitter, QScrollArea, QFileDialog, QToolButton
 )
 from PyQt6.QtGui import QPainter, QBrush, QColor, QFont, QIcon, QLinearGradient, QPen
 from PyQt6.QtCore import Qt, QTimer, QPoint, QSize, QPropertyAnimation, QEasingCurve, QRect, pyqtProperty, QUrl
@@ -14,6 +14,9 @@ import os
 import time
 import webbrowser
 from password_utils import generate_password
+from collapsible_panel import CollapsiblePanel
+from enhanced_buttons import EnhancedButton, IconButton
+from file_utils import VaultFileManager
 
 # Directory scanning instead of fixed file
 DATABASE_DIR = os.path.dirname(os.path.abspath(__file__)) or os.getcwd()
@@ -40,6 +43,66 @@ COLOR_PANEL_SELECTED = "rgba(60, 50, 90, 200)"
 COLOR_STATUS_INFO = "#8BE9FD"
 COLOR_STATUS_SUCCESS = "#50FA7B"
 COLOR_STATUS_ERROR = "#FF5555"
+
+THEMES = {
+    "dark": {
+        "BG": "#121218",
+        "BG_GRADIENT_TOP": "#1A1A24",
+        "BG_GRADIENT_BOTTOM": "#0D0D12",
+        "TEXT": "#F8F8F2",
+        "TEXT_SECONDARY": "#BFBFBF",
+        "PANEL": "rgba(30, 30, 40, 180)",
+        "PANEL_LIGHTER": "rgba(40, 40, 50, 200)",
+        "PANEL_SELECTED": "rgba(60, 50, 90, 200)"
+    },
+    "light": {
+        "BG": "#f0f0f0",
+        "BG_GRADIENT_TOP": "#ffffff",
+        "BG_GRADIENT_BOTTOM": "#e0e0e0",
+        "TEXT": "#2a2a2a",
+        "TEXT_SECONDARY": "#555555",
+        "PANEL": "rgba(255, 255, 255, 220)",
+        "PANEL_LIGHTER": "rgba(250, 250, 250, 240)",
+        "PANEL_SELECTED": "rgba(230, 230, 255, 220)"
+    }
+}
+
+
+class ModernButton(QPushButton):
+    def __init__(self, text, parent=None, primary=True):
+        super().__init__(text, parent)
+        self.current_theme = "dark"
+        self.primary = primary
+        self._base_color = COLOR_PRIMARY if primary else COLOR_SECONDARY
+        self._hover_color = COLOR_PRIMARY_HOVER if primary else COLOR_SECONDARY_HOVER
+        self._pressed_color = COLOR_PRIMARY_PRESSED if primary else COLOR_SECONDARY_PRESSED
+
+        # Current background color, will be animated
+        self._color = self._base_color
+
+        # Shadow effect
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(15)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        shadow.setOffset(0, 2)
+        self.setGraphicsEffect(shadow)
+
+        # Setup style
+        self.update_style()
+
+    def update_style(self):
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self._color};
+                color: {COLOR_TEXT};
+                border: none;
+                border-radius: 8px;
+                padding: 10px;
+                font-weight: bold;
+                font-size: 14px;
+            }}
+        """)
+
 
 THEMES = {
     "dark": {
@@ -187,7 +250,7 @@ class AccountManager(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Account Manager")
-        self.setGeometry(100, 100, 1000, 600)  # Larger window for better UI
+        self.setGeometry(100, 100, 1100, 700)  # Larger window for better UI
 
         # Current theme tracking
         self.current_theme = "dark"
@@ -324,6 +387,7 @@ class AccountManager(QWidget):
         # Dictionary to store all accounts by file
         self.all_db_accounts = {}  # Format: {filename: {account_name: password}}
         self.current_db_file = None
+        self.current_db_path = None  # Full path to current database file
 
         # Initialize timer for periodic checking of database files
         self.file_check_timer = QTimer(self)
@@ -375,18 +439,31 @@ class AccountManager(QWidget):
         header_layout.addWidget(self.status_label)
 
         # Toggle button placed right side
-        self.theme_toggle = ModernButton("🌙", primary=False)
-        self.theme_toggle.setFixedSize(QSize(40, 30))
-        self.theme_toggle.setToolTip("Toggle Dark/Light Mode")
+        self.theme_toggle = IconButton(
+            QIcon(), "Toggle Dark/Light Mode", style="secondary")
+        self.theme_toggle.setText("🌙")
+        self.theme_toggle.setFixedSize(QSize(40, 40))
         self.theme_toggle.clicked.connect(self.toggle_theme)
         header_layout.addWidget(self.theme_toggle)
 
-        # Current database indicator
+        # Current database indicator with location button
+        db_indicator_layout = QHBoxLayout()
+        db_indicator_layout.setSpacing(5)
+
         self.current_db_indicator = QLabel("")
         self.current_db_indicator.setFont(QFont("Segoe UI", 12))
         self.current_db_indicator.setStyleSheet(
             f"color: {COLOR_TEXT_SECONDARY};")
-        header_layout.addWidget(self.current_db_indicator)
+        db_indicator_layout.addWidget(self.current_db_indicator)
+
+        # Add location button
+        self.show_location_btn = IconButton(
+            QIcon(), "Show Database Location", style="info")
+        self.show_location_btn.setText("📁")
+        self.show_location_btn.clicked.connect(self.show_database_location)
+        db_indicator_layout.addWidget(self.show_location_btn)
+
+        header_layout.addLayout(db_indicator_layout)
 
         main_layout.addWidget(header_panel)
 
@@ -399,77 +476,87 @@ class AccountManager(QWidget):
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(10, 10, 10, 10)
 
-        # Database selector section
-        db_section = QFrame()
-        db_section_layout = QVBoxLayout(db_section)
-        db_section_layout.setContentsMargins(0, 0, 0, 0)
+        # Database section using collapsible panel
+        db_collapsible = CollapsiblePanel("Database Management", expanded=True)
+        self.db_collapsible = db_collapsible  # Store reference for theme updates
 
-        db_header = QLabel("Databases")
-        db_header.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        db_section_layout.addWidget(db_header)
+        db_content_layout = QVBoxLayout()
+
+        # Database location/file management section
+        db_location_layout = QVBoxLayout()
 
         # Dropdown for file selection with label
         self.db_file_selector = QComboBox()
         self.db_file_selector.setMinimumHeight(40)
         self.db_file_selector.currentIndexChanged.connect(
             self.change_database_file)
-        db_section_layout.addWidget(self.db_file_selector)
+        db_location_layout.addWidget(self.db_file_selector)
 
         # Database management buttons
         db_buttons_layout = QHBoxLayout()
         db_buttons_layout.setSpacing(10)
 
-        self.new_db_button = ModernButton("Create Database", primary=False)
+        self.new_db_button = EnhancedButton("New Database", style="secondary")
         self.new_db_button.clicked.connect(self.create_new_database)
         db_buttons_layout.addWidget(self.new_db_button)
 
-        self.del_db_button = DangerButton("Delete Database")
+        self.open_db_button = EnhancedButton("Open External", style="info")
+        self.open_db_button.setToolTip("Open a vault file from any location")
+        self.open_db_button.clicked.connect(self.open_external_database)
+        db_buttons_layout.addWidget(self.open_db_button)
+
+        self.del_db_button = EnhancedButton("Delete Database", style="danger")
         self.del_db_button.clicked.connect(self.delete_database)
         db_buttons_layout.addWidget(self.del_db_button)
 
-        db_section_layout.addLayout(db_buttons_layout)
-        left_layout.addWidget(db_section)
+        db_location_layout.addLayout(db_buttons_layout)
+        db_content_layout.addLayout(db_location_layout)
 
-        # Separator
-        separator = QFrame()
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setFrameShadow(QFrame.Shadow.Sunken)
-        separator.setStyleSheet(
-            "background-color: rgba(138, 43, 226, 50); margin: 10px 0;")
-        left_layout.addWidget(separator)
+        db_collapsible.add_layout(db_content_layout)
+        left_layout.addWidget(db_collapsible)
 
-        # Accounts section
-        accounts_section = QFrame()
-        accounts_layout = QVBoxLayout(accounts_section)
-        accounts_layout.setContentsMargins(0, 0, 0, 0)
+        # Accounts section using collapsible panel
+        accounts_collapsible = CollapsiblePanel("Accounts", expanded=True)
+        # Store reference for theme updates
+        self.accounts_collapsible = accounts_collapsible
 
-        accounts_header = QLabel("Accounts")
-        accounts_header.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        accounts_layout.addWidget(accounts_header)
+        accounts_content_layout = QVBoxLayout()
 
-        # Account list with scroll area
+        # Account list with larger size and enhanced styling
         account_list_container = QScrollArea()
         account_list_container.setWidgetResizable(True)
         account_list_container.setStyleSheet(
             "border: none; background: transparent;")
+        account_list_container.setMinimumHeight(250)  # Larger account list
 
         account_list_widget = QWidget()
         account_list_layout = QVBoxLayout(account_list_widget)
         account_list_layout.setContentsMargins(0, 0, 0, 0)
 
         self.account_list = QListWidget()
-        self.account_list.setMinimumHeight(150)
+        self.account_list.setMinimumHeight(220)
         self.account_list.itemSelectionChanged.connect(
             self.display_account_details)
         account_list_layout.addWidget(self.account_list)
 
         account_list_container.setWidget(account_list_widget)
-        accounts_layout.addWidget(account_list_container)
+        accounts_content_layout.addWidget(account_list_container)
+
+        accounts_collapsible.add_layout(accounts_content_layout)
+        left_layout.addWidget(accounts_collapsible)
+
+        # Add account section using collapsible panel
+        add_account_collapsible = CollapsiblePanel(
+            "Add/Edit Account", expanded=True)
+        # Store reference for theme updates
+        self.add_account_collapsible = add_account_collapsible
+
+        add_account_content_layout = QVBoxLayout()
 
         # Input fields for new account
         input_section = QFrame()
         input_layout = QVBoxLayout(input_section)
-        input_layout.setContentsMargins(0, 10, 0, 0)
+        input_layout.setContentsMargins(0, 0, 0, 0)
 
         name_layout = QVBoxLayout()
         name_label = QLabel("Account Name")
@@ -515,18 +602,24 @@ class AccountManager(QWidget):
         account_buttons_layout = QHBoxLayout()
         account_buttons_layout.setSpacing(10)
 
-        self.add_button = ModernButton("Add Account")
+        self.add_button = EnhancedButton("Add Account", style="primary")
         self.add_button.clicked.connect(self.add_account)
         account_buttons_layout.addWidget(self.add_button)
 
-        self.del_button = DangerButton("Delete Account")
+        self.clear_button = EnhancedButton("Clear Fields", style="secondary")
+        self.clear_button.clicked.connect(self.clear_input_fields)
+        account_buttons_layout.addWidget(self.clear_button)
+
+        self.del_button = EnhancedButton("Delete Account", style="danger")
         self.del_button.clicked.connect(self.del_account)
         account_buttons_layout.addWidget(self.del_button)
 
         input_layout.addLayout(account_buttons_layout)
-        accounts_layout.addWidget(input_section)
+        add_account_content_layout.addWidget(input_section)
 
-        left_layout.addWidget(accounts_section)
+        add_account_collapsible.add_layout(add_account_content_layout)
+        left_layout.addWidget(add_account_collapsible)
+
         content_splitter.addWidget(left_panel)
 
         # Right Panel (Account Details)
@@ -562,45 +655,49 @@ class AccountManager(QWidget):
         # Action buttons for details
         details_buttons_layout = QHBoxLayout()
 
-        self.copy_button = ModernButton("Copy Details", primary=False)
+        self.copy_button = EnhancedButton("Copy Details", style="secondary")
         self.copy_button.clicked.connect(self.copy_details)
         details_buttons_layout.addWidget(self.copy_button)
 
         # Website button
-        self.website_button = ModernButton("Open Website", primary=True)
+        self.website_button = EnhancedButton("Open Website", style="primary")
         self.website_button.clicked.connect(self.open_website)
         self.website_button.setVisible(False)  # Initially hidden
         details_buttons_layout.addWidget(self.website_button)
 
         # Edit password button
-        self.edit_button = ModernButton("Edit Password")
+        self.edit_button = EnhancedButton("Edit Password", style="primary")
         self.edit_button.clicked.connect(self.edit_password)
         details_buttons_layout.addWidget(self.edit_button)
 
         right_layout.addLayout(details_buttons_layout)
 
-        # New feature: Password generator
-        password_gen_section = QFrame()
-        password_gen_layout = QVBoxLayout(password_gen_section)
+        # Password generator using collapsible panel
+        password_gen_collapsible = CollapsiblePanel(
+            "Password Generator", expanded=True)
+        # Store reference for theme updates
+        self.password_gen_collapsible = password_gen_collapsible
 
-        password_gen_header = QLabel("Password Generator")
-        password_gen_header.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        password_gen_layout.addWidget(password_gen_header)
+        password_gen_content_layout = QVBoxLayout()
 
         password_gen_buttons = QHBoxLayout()
 
-        self.gen_simple_button = ModernButton("Generate Simple", primary=False)
+        self.gen_simple_button = EnhancedButton(
+            "Generate Simple", style="secondary")
         self.gen_simple_button.clicked.connect(
             lambda: self.generate_password(simple=True))
         password_gen_buttons.addWidget(self.gen_simple_button)
 
-        self.gen_strong_button = ModernButton("Generate Strong")
+        self.gen_strong_button = EnhancedButton(
+            "Generate Strong", style="primary")
         self.gen_strong_button.clicked.connect(
             lambda: self.generate_password(simple=False))
         password_gen_buttons.addWidget(self.gen_strong_button)
 
-        password_gen_layout.addLayout(password_gen_buttons)
-        right_layout.addWidget(password_gen_section)
+        password_gen_content_layout.addLayout(password_gen_buttons)
+
+        password_gen_collapsible.add_layout(password_gen_content_layout)
+        right_layout.addWidget(password_gen_collapsible)
 
         content_splitter.addWidget(right_panel)
 
@@ -616,6 +713,77 @@ class AccountManager(QWidget):
         self.theme_toggle.setText(
             "☀️" if self.current_theme == "dark" else "🌙")
         self.apply_theme()
+
+    def open_external_database(self):
+        """Opens a vault file from any location on the system."""
+        file_path = VaultFileManager.open_vault_file_dialog(
+            self, "Open Vault File")
+        if not file_path:
+            return
+
+        try:
+            # Attempt to load the vault file
+            accounts, error = VaultFileManager.try_load_vault_file(file_path)
+
+            if accounts is None:
+                QMessageBox.warning(self, "Open Error",
+                                    f"Could not open file: {error}")
+                return
+
+            # Get just the filename for display
+            filename = os.path.basename(file_path)
+
+            # Add to our account dictionary
+            self.all_db_accounts[filename] = accounts
+
+            # Set as current database
+            self.current_db_file = filename
+            self.current_db_path = file_path
+
+            # Update UI
+            self.scan_for_database_files()
+
+            # Select the newly opened database
+            for i in range(self.db_file_selector.count()):
+                if self.db_file_selector.itemText(i).startswith(f"{filename} ("):
+                    self.db_file_selector.setCurrentIndex(i)
+                    break
+
+            self.set_status(f"Opened external database: {filename}", "success")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Open Error",
+                                 f"Error opening file: {e}")
+
+    def show_database_location(self):
+        """Shows the current database location."""
+        if not self.current_db_file:
+            self.set_status("No database currently selected", "info")
+            return
+
+        # If it's an external file, show the full path
+        if self.current_db_path:
+            QMessageBox.information(
+                self,
+                "Database Location",
+                f"Current database is located at:\n{self.current_db_path}"
+            )
+        else:
+            # It's a local file in the application directory
+            db_path = os.path.join(DATABASE_DIR, self.current_db_file)
+            QMessageBox.information(
+                self,
+                "Database Location",
+                f"Current database is located at:\n{db_path}"
+            )
+
+    def clear_input_fields(self):
+        """Clears all input fields."""
+        self.name_input.clear()
+        self.email_input.clear()
+        self.website_input.clear()
+        self.pass_input.clear()
+        self.set_status("Input fields cleared", "info")
 
     def apply_theme(self):
         if self.current_theme not in THEMES:
@@ -653,6 +821,12 @@ class AccountManager(QWidget):
                 }}
             """)
 
+            # Update collapsible panels
+            self.db_collapsible.update_panel_color(COLOR_PANEL)
+            self.accounts_collapsible.update_panel_color(COLOR_PANEL)
+            self.add_account_collapsible.update_panel_color(COLOR_PANEL)
+            self.password_gen_collapsible.update_panel_color(COLOR_PANEL)
+
             # Update buttons
             for widget in self.findChildren(ModernButton):
                 widget.update_style()
@@ -666,6 +840,203 @@ class AccountManager(QWidget):
 
         # Repaint the window to apply new colors
         self.repaint()
+
+    def scan_for_database_files(self):
+        """Searches the directory for compatible database files"""
+        # Save previous selection
+        previous_selection = self.db_file_selector.currentText()
+        previous_file = previous_selection.split(
+            " (")[0] if " (" in previous_selection else previous_selection
+
+        selected_account = None
+        if self.account_list.currentItem():
+            selected_account = self.account_list.currentItem().text()
+
+        # Update status
+        self.set_status("Searching for database files...", "info")
+        QApplication.processEvents()  # Update UI
+
+        # Block signals during update
+        self.db_file_selector.blockSignals(True)
+        self.db_file_selector.clear()
+
+        # Get current directory
+        current_dir = DATABASE_DIR
+
+        found_files = []
+
+        # Keep track of external files that might have been opened
+        external_files = {}
+        for filename, accounts in self.all_db_accounts.items():
+            if filename == self.current_db_file and self.current_db_path:
+                external_files[filename] = (self.current_db_path, accounts)
+
+        # Search for compatible files in current directory
+        for file in os.listdir(current_dir):
+            file_path = os.path.join(current_dir, file)
+            if os.path.isfile(file_path) and not file.startswith('.'):
+                try:
+                    accounts, error = VaultFileManager.try_load_vault_file(
+                        file_path)
+                    if accounts is not None:  # If it's a valid database format
+                        found_files.append((file, len(accounts)))
+                        # Store accounts in the all_db_accounts dictionary
+                        self.all_db_accounts[file] = accounts
+                except Exception as e:
+                    pass  # Ignore non-compatible files
+
+        # Also include any external files that were opened
+        for filename, (file_path, accounts) in external_files.items():
+            # Check if the file still exists
+            if os.path.exists(file_path):
+                # Refresh the accounts from file
+                try:
+                    accounts, error = VaultFileManager.try_load_vault_file(
+                        file_path)
+                    if accounts is not None:
+                        found_files.append((filename, len(accounts)))
+                        self.all_db_accounts[filename] = accounts
+                except Exception:
+                    # Keep using the accounts we have if we can't refresh
+                    found_files.append((filename, len(accounts)))
+                    self.all_db_accounts[filename] = accounts
+
+    # Add found files to dropdown
+        if found_files:
+            for file, count in sorted(found_files):
+                self.db_file_selector.addItem(f"{file} ({count} accounts)")
+
+            # Try to restore previous selection
+            index = -1
+            for i in range(self.db_file_selector.count()):
+                item_text = self.db_file_selector.itemText(i)
+                file_name = item_text.split(
+                    " (")[0] if " (" in item_text else item_text
+                if file_name == previous_file:
+                    index = i
+                    break
+
+            if index >= 0:
+                self.db_file_selector.setCurrentIndex(index)
+            else:
+                self.db_file_selector.setCurrentIndex(0)  # Select first file
+
+            # Update status
+            self.set_status(
+                f"{len(found_files)} database files found", "success")
+        else:
+            self.all_db_accounts = {}
+            self.account_list.clear()
+            self.details_view.clear()
+            self.current_db_indicator.setText("")
+            self.website_button.setVisible(False)
+            self.current_db_path = None
+            self.set_status("No database files found", "error")
+
+        # Release signals
+        self.db_file_selector.blockSignals(False)
+
+        # Load accounts for current file
+        self.change_database_file()
+
+        # Attempts to select the previously selected account again
+        if selected_account:
+            for i in range(self.account_list.count()):
+                if self.account_list.item(i).text() == selected_account:
+                    self.account_list.setCurrentRow(i)
+                    break
+
+    def change_database_file(self):
+        """Changes the current database file"""
+        if self.db_file_selector.count() == 0:
+            self.current_db_file = None
+            self.current_db_path = None
+            self.account_list.clear()
+            self.current_db_indicator.setText("")
+            self.details_view.clear()
+            return
+
+        # Extract filename from ComboBox text (Format: "filename (X accounts)")
+        full_text = self.db_file_selector.currentText()
+        new_db_file = full_text.split(
+            " (")[0] if " (" in full_text else full_text
+
+        # Check if this is a different file than the current one
+        if new_db_file != self.current_db_file:
+            self.current_db_file = new_db_file
+
+            # Reset current_db_path unless we're switching to a known external file
+            known_external = False
+            if self.current_db_file in self.all_db_accounts:
+                self.current_db_path = None  # Reset to None by default
+
+                # Check if this is an external file we've opened
+                for i in range(self.db_file_selector.count()):
+                    item_text = self.db_file_selector.itemText(i)
+                    if item_text.startswith(f"{self.current_db_file} ("):
+                        # It's in our list, but we need to check if it's an external file
+                        # This would require checking each file against a record of external files
+                        # For simplicity, we assume it's a local file for now
+                        break
+
+        # Update the current database indicator in header
+        self.current_db_indicator.setText(
+            f"Current: {self.current_db_file}")
+
+        # Load accounts for current file
+        self.load_account_list()
+
+        # Show location button should be visible if we have a current db file
+        self.show_location_btn.setVisible(bool(self.current_db_file))
+
+    def save_accounts(self, filename):
+        """Saves the accounts to the database file"""
+        if not filename:
+            return False
+
+        try:
+            # Get the accounts for the current file
+            accounts = self.all_db_accounts.get(filename, {})
+
+            # Determine the file path
+            if filename == self.current_db_file and self.current_db_path:
+                # This is an external file
+                file_path = self.current_db_path
+            else:
+                # This is a local file
+                file_path = os.path.join(DATABASE_DIR, filename)
+
+            # Save the file
+            success, error = VaultFileManager.save_vault_file(
+                file_path, accounts)
+
+            if not success:
+                QMessageBox.critical(self, "Save Error",
+                                     f"Could not save database: {error}")
+                return False
+
+            return True
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error",
+                                 f"Could not save database: {e}")
+            return False
+
+    def load_account_list(self):
+        """Loads the account list for the current database"""
+        self.account_list.clear()
+
+        if not self.current_db_file:
+            return
+
+        if self.current_db_file not in self.all_db_accounts:
+            return
+
+        # Add accounts to list
+        for account_name in sorted(self.all_db_accounts[self.current_db_file].keys()):
+            item = QListWidgetItem(account_name)
+            # Add hover animation effect via style
+            item.setToolTip("Click to view details")
+            self.account_list.addItem(item)
 
     def generate_stylesheet(self):
         """Generates the stylesheet based on the current theme"""
@@ -859,124 +1230,6 @@ class AccountManager(QWidget):
             self.status_animation.setSingleShot(True)
             self.status_animation.start(3000)  # 3 seconds
 
-    def scan_for_database_files(self):
-        """Searches the directory for compatible database files"""
-        # Save previous selection
-        previous_selection = self.db_file_selector.currentText()
-        previous_file = previous_selection.split(
-            " (")[0] if " (" in previous_selection else previous_selection
-
-        selected_account = None
-        if self.account_list.currentItem():
-            selected_account = self.account_list.currentItem().text()
-
-        # Update status
-        self.set_status("Searching for database files...", "info")
-        QApplication.processEvents()  # Update UI
-
-        # Block signals during update
-        self.db_file_selector.blockSignals(True)
-        self.db_file_selector.clear()
-
-        # Get current directory
-        current_dir = DATABASE_DIR
-
-        found_files = []
-
-        # Search for compatible files
-        for file in os.listdir(current_dir):
-            file_path = os.path.join(current_dir, file)
-            if os.path.isfile(file_path):
-                try:
-                    accounts = self.try_load_database(file_path)
-                    if accounts is not None:  # If it's a valid database format
-                        found_files.append((file, len(accounts)))
-                        # Store accounts in the all_db_accounts dictionary
-                        self.all_db_accounts[file] = accounts
-                except Exception as e:
-                    pass  # Ignore non-compatible files
-
-        # Add found files to dropdown
-        if found_files:
-            for file, count in sorted(found_files):
-                self.db_file_selector.addItem(f"{file} ({count} accounts)")
-
-            # Try to restore previous selection
-            index = -1
-            for i in range(self.db_file_selector.count()):
-                item_text = self.db_file_selector.itemText(i)
-                file_name = item_text.split(
-                    " (")[0] if " (" in item_text else item_text
-                if file_name == previous_file:
-                    index = i
-                    break
-
-            if index >= 0:
-                self.db_file_selector.setCurrentIndex(index)
-            else:
-                self.db_file_selector.setCurrentIndex(0)  # Select first file
-
-            # Update status
-            self.set_status(
-                f"{len(found_files)} database files found", "success")
-        else:
-            self.all_db_accounts = {}
-            self.account_list.clear()
-            self.details_view.clear()
-            self.current_db_indicator.setText("")
-            self.website_button.setVisible(False)
-            self.set_status("No database files found", "error")
-
-        # Release signals
-        self.db_file_selector.blockSignals(False)
-
-        # Load accounts for current file
-        self.change_database_file()
-
-        # Attempts to select the previously selected account again
-        if selected_account:
-            for i in range(self.account_list.count()):
-                if self.account_list.item(i).text() == selected_account:
-                    self.account_list.setCurrentRow(i)
-                    break
-
-    def try_load_database(self, file_path):
-        """Attempts to load a file as a database"""
-        try:
-            with open(file_path, "rb") as f:
-                encoded_data = f.read()
-                # Try to decode Base64
-                decoded_data = base64.b64decode(encoded_data)
-                # Try to load as JSON
-                json_data = json.loads(decoded_data.decode())
-                # If that works, it's probably a valid database file
-                if isinstance(json_data, dict):
-                    return json_data
-        except:
-            pass
-        return None
-
-    def change_database_file(self):
-        """Changes the current database file"""
-        if self.db_file_selector.count() == 0:
-            self.current_db_file = None
-            self.account_list.clear()
-            self.current_db_indicator.setText("")
-            self.details_view.clear()
-            return
-
-        # Extract filename from ComboBox text (Format: "filename (X accounts)")
-        full_text = self.db_file_selector.currentText()
-        self.current_db_file = full_text.split(
-            " (")[0] if " (" in full_text else full_text
-
-        # Update the current database indicator in header
-        self.current_db_indicator.setText(
-            f"Current Database: {self.current_db_file}")
-
-        # Load accounts for current file
-        self.load_account_list()
-
     def create_new_database(self):
         """Creates a new database file"""
         name, ok = QInputDialog.getText(
@@ -998,10 +1251,12 @@ class AccountManager(QWidget):
 
             # Create and save empty database
             try:
-                json_data = json.dumps({}).encode()
-                encoded_data = base64.b64encode(json_data)
-                with open(file_path, "wb") as f:
-                    f.write(encoded_data)
+                success, error = VaultFileManager.save_vault_file(
+                    file_path, {})
+                if not success:
+                    QMessageBox.critical(
+                        self, "Creation Error", f"Could not create database: {error}")
+                    return
 
                 # Update the view
                 self.scan_for_database_files()
@@ -1035,7 +1290,12 @@ class AccountManager(QWidget):
         if confirm == QMessageBox.StandardButton.Yes:
             try:
                 # Delete the file
-                file_path = os.path.join(DATABASE_DIR, self.current_db_file)
+                if self.current_db_path:  # External file
+                    file_path = self.current_db_path
+                else:  # Local file
+                    file_path = os.path.join(
+                        DATABASE_DIR, self.current_db_file)
+
                 if os.path.exists(file_path):
                     os.remove(file_path)
 
@@ -1055,6 +1315,7 @@ class AccountManager(QWidget):
 
                 # Reset current file
                 self.current_db_file = None
+                self.current_db_path = None
             except Exception as e:
                 QMessageBox.critical(self, "Deletion Error",
                                      f"Could not delete database: {e}")
@@ -1152,23 +1413,6 @@ class AccountManager(QWidget):
                 self.set_status(
                     f"Account '{account_name}' deleted successfully", "success")
 
-    def load_account_list(self):
-        """Loads the account list for the current database"""
-        self.account_list.clear()
-
-        if not self.current_db_file:
-            return
-
-        if self.current_db_file not in self.all_db_accounts:
-            return
-
-        # Add accounts to list
-        for account_name in sorted(self.all_db_accounts[self.current_db_file].keys()):
-            item = QListWidgetItem(account_name)
-            # Add hover animation effect via style
-            item.setToolTip("Click to view details")
-            self.account_list.addItem(item)
-
     def display_account_details(self):
         """Displays the details of the selected account"""
         selected_items = self.account_list.selectedItems()
@@ -1245,30 +1489,6 @@ class AccountManager(QWidget):
             except Exception as e:
                 self.set_status(f"Could not open website: {e}", "error")
 
-    def save_accounts(self, filename):
-        """Saves the accounts to the database file"""
-        if not filename:
-            return False
-
-        try:
-            # Get the accounts for the current file
-            accounts = self.all_db_accounts.get(filename, {})
-
-            # Convert to JSON and encode
-            json_data = json.dumps(accounts).encode()
-            encoded_data = base64.b64encode(json_data)
-
-            # Save to file
-            file_path = os.path.join(DATABASE_DIR, filename)
-            with open(file_path, "wb") as f:
-                f.write(encoded_data)
-
-            return True
-        except Exception as e:
-            QMessageBox.critical(self, "Save Error",
-                                 f"Could not save database: {e}")
-            return False
-
     def copy_details(self):
         """Copies the selected account details to clipboard"""
         selected_items = self.account_list.selectedItems()
@@ -1306,18 +1526,7 @@ class AccountManager(QWidget):
             self.set_status("Account details copied to clipboard", "success")
 
             # Flash effect on copy button
-            original_color = self.copy_button._color
-            self.copy_button._color = COLOR_STATUS_SUCCESS
-            self.copy_button.update_style()
-
-            # Reset color after delay
-            QTimer.singleShot(300, lambda: self.reset_button_color(
-                self.copy_button, original_color))
-
-    def reset_button_color(self, button, color):
-        """Helper to reset button color after animation"""
-        button._color = color
-        button.update_style()
+            self.copy_button.flash(COLOR_STATUS_SUCCESS)
 
     def edit_password(self):
         """Edits the password of the selected account"""
@@ -1373,29 +1582,6 @@ class AccountManager(QWidget):
                 # Show confirmation
                 self.set_status(
                     f"Password for '{account_name}' updated", "success")
-        if self.current_db_file and account_name in self.all_db_accounts[self.current_db_file]:
-            current_password = self.all_db_accounts[self.current_db_file][account_name]
-
-            # Ask for new password
-            new_password, ok = QInputDialog.getText(
-                self,
-                "Edit Password",
-                f"Enter new password for '{account_name}':",
-                QLineEdit.EchoMode.Password,
-                current_password
-            )
-
-            if ok and new_password:
-                # Update password
-                self.all_db_accounts[self.current_db_file][account_name] = new_password
-                self.save_accounts(self.current_db_file)
-
-                # Update display
-                self.display_account_details()
-
-                # Show confirmation
-                self.set_status(
-                    f"Password for '{account_name}' updated", "success")
 
     def generate_password(self, simple=True):
         """Generates a random password"""
@@ -1416,7 +1602,7 @@ class AccountManager(QWidget):
         QTimer.singleShot(
             500, lambda: self.pass_input.setStyleSheet(original_style))
 
-        complexity = "simgle" if simple else "complex"
+        complexity = "simple" if simple else "complex"
         self.set_status(f"Generated {complexity} password", "success")
 
 
