@@ -13,6 +13,7 @@ import base64
 import os
 import time
 import webbrowser
+from password_utils import generate_password
 
 # Directory scanning instead of fixed file
 DATABASE_DIR = os.path.dirname(os.path.abspath(__file__)) or os.getcwd()
@@ -1397,33 +1398,13 @@ class AccountManager(QWidget):
                     f"Password for '{account_name}' updated", "success")
 
     def generate_password(self, simple=True):
-        """Generates a random password and places it in the password field"""
-        import string
-
-        if simple:
-            # Generate simple but memorable password
-            adjectives = ["happy", "clever", "brave",
-                          "wise", "gentle", "swift", "bright", "calm"]
-            nouns = ["tiger", "river", "mountain", "forest",
-                     "ocean", "desert", "cloud", "star"]
-            numbers = [str(random.randint(10, 99)) for _ in range(1)]
-
-            password = random.choice(
-                adjectives) + random.choice(nouns) + random.choice(numbers)
-        else:
-            # Generate strong random password with special characters
-            length = 16
-            chars = string.ascii_letters + string.digits + string.punctuation
-            password = ''.join(random.choice(chars) for _ in range(length))
-
-        # Set password in input field
+        """Generates a random password"""
+        password = generate_password(simple)
         self.pass_input.setText(password)
-
-        # Show animation to highlight the password field
         original_style = self.pass_input.styleSheet()
         highlight_style = f"""
             QLineEdit {{
-                background-color: rgba(80, 250, 123, 50);
+                background-color: rgba(80, 250, 123, 150);
                 color: {COLOR_TEXT};
                 border: 2px solid {COLOR_STATUS_SUCCESS};
                 border-radius: 8px;
@@ -1432,13 +1413,10 @@ class AccountManager(QWidget):
             }}
         """
         self.pass_input.setStyleSheet(highlight_style)
-
-        # Reset style after delay
         QTimer.singleShot(
             500, lambda: self.pass_input.setStyleSheet(original_style))
 
-        # Show confirmation
-        complexity = "simple" if simple else "strong"
+        complexity = "simgle" if simple else "complex"
         self.set_status(f"Generated {complexity} password", "success")
 
 
