@@ -1,2 +1,4 @@
 *.info
 main.
+__pycache__/
+*.py[cod]

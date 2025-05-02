@@ -2,8 +2,8 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QLineEdit, QListWidget, QMessageBox, QTextEdit,
     QComboBox, QListWidgetItem, QInputDialog, QGraphicsDropShadowEffect,
-    # Add QSizePolicy here
-    QFrame, QSplitter, QScrollArea, QFileDialog, QToolButton, QSizePolicy
+    QFrame, QSplitter, QScrollArea, QFileDialog, QToolButton, QSizePolicy,
+    QGridLayout, QStackedWidget
 )
 from PyQt6.QtGui import QPainter, QBrush, QColor, QFont, QIcon, QLinearGradient, QPen
 from PyQt6.QtCore import Qt, QTimer, QPoint, QSize, QPropertyAnimation, QEasingCurve, QRect, pyqtProperty, QUrl
@@ -15,7 +15,6 @@ import os
 import time
 import webbrowser
 from password_utils import generate_password
-from collapsible_panel import CollapsiblePanel
 from enhanced_buttons import EnhancedButton, IconButton
 from file_utils import VaultFileManager
 
@@ -69,137 +68,6 @@ THEMES = {
 }
 
 
-class ModernButton(QPushButton):
-    def __init__(self, text, parent=None, primary=True):
-        super().__init__(text, parent)
-        self.current_theme = "dark"
-        self.primary = primary
-        self._base_color = COLOR_PRIMARY if primary else COLOR_SECONDARY
-        self._hover_color = COLOR_PRIMARY_HOVER if primary else COLOR_SECONDARY_HOVER
-        self._pressed_color = COLOR_PRIMARY_PRESSED if primary else COLOR_SECONDARY_PRESSED
-
-        # Current background color, will be animated
-        self._color = self._base_color
-
-        # Shadow effect
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(15)
-        shadow.setColor(QColor(0, 0, 0, 80))
-        shadow.setOffset(0, 2)
-        self.setGraphicsEffect(shadow)
-
-        # Setup style
-        self.update_style()
-
-    def update_style(self):
-        self.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {self._color};
-                color: {COLOR_TEXT};
-                border: none;
-                border-radius: 8px;
-                padding: 10px;
-                font-weight: bold;
-                font-size: 14px;
-            }}
-        """)
-
-
-THEMES = {
-    "dark": {
-        "BG": "#121218",
-        "BG_GRADIENT_TOP": "#1A1A24",
-        "BG_GRADIENT_BOTTOM": "#0D0D12",
-        "TEXT": "#F8F8F2",
-        "TEXT_SECONDARY": "#BFBFBF",
-        "PANEL": "rgba(30, 30, 40, 180)",
-        "PANEL_LIGHTER": "rgba(40, 40, 50, 200)",
-        "PANEL_SELECTED": "rgba(60, 50, 90, 200)"
-    },
-    "light": {
-        "BG": "#f0f0f0",
-        "BG_GRADIENT_TOP": "#ffffff",
-        "BG_GRADIENT_BOTTOM": "#e0e0e0",
-        "TEXT": "#2a2a2a",
-        "TEXT_SECONDARY": "#555555",
-        "PANEL": "rgba(255, 255, 255, 220)",
-        "PANEL_LIGHTER": "rgba(250, 250, 250, 240)",
-        "PANEL_SELECTED": "rgba(230, 230, 255, 220)"
-    }
-}
-
-
-class ModernButton(QPushButton):
-    def __init__(self, text, parent=None, primary=True):
-        super().__init__(text, parent)
-        self.current_theme = "dark"
-        self.primary = primary
-        self._base_color = COLOR_PRIMARY if primary else COLOR_SECONDARY
-        self._hover_color = COLOR_PRIMARY_HOVER if primary else COLOR_SECONDARY_HOVER
-        self._pressed_color = COLOR_PRIMARY_PRESSED if primary else COLOR_SECONDARY_PRESSED
-
-        # Current background color, will be animated
-        self._color = self._base_color
-
-        # Shadow effect
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(15)
-        shadow.setColor(QColor(0, 0, 0, 80))
-        shadow.setOffset(0, 2)
-        self.setGraphicsEffect(shadow)
-
-        # Setup style
-        self.update_style()
-
-    def update_style(self):
-        self.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {self._color};
-                color: {COLOR_TEXT};
-                border: none;
-                border-radius: 8px;
-                padding: 10px;
-                font-weight: bold;
-                font-size: 14px;
-            }}
-        """)
-
-    def enterEvent(self, event):
-        self._color = self._hover_color
-        self.update_style()
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self._color = self._base_color
-        self.update_style()
-        super().leaveEvent(event)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._color = self._pressed_color
-            self.update_style()
-        super().mousePressEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._color = self._hover_color if self.underMouse() else self._base_color
-            self.update_style()
-        super().mouseReleaseEvent(event)
-
-    def update_theme_colors(self, theme_name):
-        self.current_theme = theme_name
-
-
-class DangerButton(ModernButton):
-    def __init__(self, text, parent=None):
-        super().__init__(text, parent, False)
-        self._base_color = COLOR_DANGER
-        self._hover_color = COLOR_DANGER_HOVER
-        self._pressed_color = COLOR_DANGER_PRESSED
-        self._color = self._base_color
-        self.update_style()
-
-
 class Snowflake:
     def __init__(self, x, y, size, speed, window_width, window_height):
         self.x = x
@@ -247,10 +115,76 @@ class ModernPanel(QFrame):
         """)
 
 
+class HeaderPanel(ModernPanel):
+    """A dedicated panel for the application header"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Set minimum height for the header
+        self.setMinimumHeight(60)
+        self.setMaximumHeight(60)
+
+        # Main layout
+        self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(15, 5, 15, 5)
+
+        # App title
+        self.title_label = QLabel("Vaultix Account Manager")
+        self.title_label.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        self.title_label.setStyleSheet(
+            f"color: {COLOR_ACCENT}; background: transparent;")
+
+        # Status label
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet(
+            f"color: {COLOR_TEXT_SECONDARY}; font-style: italic; background: transparent;")
+
+        # Add widgets to layout
+        self.layout.addWidget(self.title_label)
+        self.layout.addStretch()
+        self.layout.addWidget(self.status_label)
+
+
+class SectionPanel(ModernPanel):
+    """A section panel with a title and content area"""
+
+    def __init__(self, title, parent=None):
+        super().__init__(parent)
+
+        # Main layout
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(15, 10, 15, 15)
+        self.layout.setSpacing(10)
+
+        # Section title
+        self.title_label = QLabel(title)
+        self.title_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        self.title_label.setStyleSheet(
+            f"color: {COLOR_PRIMARY}; background: transparent;")
+
+        # Content frame
+        self.content_frame = QFrame()
+        self.content_frame.setStyleSheet("background: transparent;")
+        self.content_layout = QVBoxLayout(self.content_frame)
+        self.content_layout.setContentsMargins(0, 5, 0, 0)
+
+        # Add to main layout
+        self.layout.addWidget(self.title_label)
+        self.layout.addWidget(self.content_frame)
+
+    def add_widget(self, widget):
+        """Add a widget to the content area"""
+        self.content_layout.addWidget(widget)
+
+    def add_layout(self, layout):
+        """Add a layout to the content area"""
+        self.content_layout.addLayout(layout)
+
+
 class AccountManager(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Account Manager")
+        self.setWindowTitle("Vaultix Account Manager")
         self.setGeometry(100, 100, 1100, 700)  # Larger window for better UI
         self.setMinimumSize(800, 500)  # Set a reasonable minimum size
 
@@ -261,130 +195,7 @@ class AccountManager(QWidget):
         self.current_website_url = None
 
         # Set window style
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {COLOR_BG};
-                color: {COLOR_TEXT};
-                font-family: 'Segoe UI', Arial, sans-serif;
-            }}
-            QLabel {{
-                color: {COLOR_TEXT};
-            }}
-            QLineEdit {{
-                background-color: {COLOR_PANEL_LIGHTER};
-                color: {COLOR_TEXT};
-                border: 1px solid rgba(138, 43, 226, 150);
-                border-radius: 8px;
-                padding: 8px;
-                font-size: 14px;
-            }}
-            QLineEdit:focus {{
-                border: 2px solid {COLOR_PRIMARY};
-            }}
-            QTextEdit {{
-                background-color: {COLOR_PANEL_LIGHTER};
-                color: {COLOR_TEXT};
-                border: 1px solid rgba(138, 43, 226, 150);
-                border-radius: 8px;
-                font-size: 14px;
-                padding: 8px;
-            }}
-            QListWidget {{
-                background-color: {COLOR_PANEL_LIGHTER};
-                color: {COLOR_TEXT};
-                border: 1px solid rgba(138, 43, 226, 150);
-                border-radius: 8px;
-                font-size: 14px;
-                padding: 5px;
-            }}
-            QListWidget::item {{
-                border-radius: 5px;
-                padding: 8px;
-                margin: 2px;
-            }}
-            QListWidget::item:hover {{
-                background-color: rgba(138, 43, 226, 30);
-            }}
-            QListWidget::item:selected {{
-                background-color: {COLOR_PANEL_SELECTED};
-                color: {COLOR_TEXT};
-                border-left: 3px solid {COLOR_ACCENT};
-            }}
-            QComboBox {{
-                background-color: {COLOR_PANEL_LIGHTER};
-                color: {COLOR_TEXT};
-                border: 1px solid rgba(138, 43, 226, 150);
-                border-radius: 8px;
-                padding: 8px;
-                padding-right: 20px;
-                font-size: 14px;
-                min-height: 25px;
-            }}
-            QComboBox:hover {{
-                border: 1px solid {COLOR_PRIMARY};
-            }}
-            QComboBox::drop-down {{
-                border: 0px;
-                width: 20px;
-            }}
-            QComboBox::down-arrow {{
-                image: url(down_arrow.png);
-                width: 12px;
-                height: 12px;
-            }}
-            QComboBox QAbstractItemView {{
-                background-color: {COLOR_PANEL};
-                color: {COLOR_TEXT};
-                selection-background-color: {COLOR_PANEL_SELECTED};
-                selection-color: {COLOR_TEXT};
-                border: 1px solid {COLOR_PRIMARY};
-                border-radius: 8px;
-                padding: 5px;
-            }}
-            QScrollBar:vertical {{
-                border: none;
-                background-color: rgba(40, 40, 50, 100);
-                width: 10px;
-                margin: 0px;
-                border-radius: 5px;
-            }}
-            QScrollBar::handle:vertical {{
-                background-color: rgba(138, 43, 226, 150);
-                min-height: 20px;
-                border-radius: 5px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background-color: rgba(154, 59, 242, 180);
-            }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                height: 0px;
-            }}
-            QScrollBar:horizontal {{
-                border: none;
-                background-color: rgba(40, 40, 50, 100);
-                height: 10px;
-                margin: 0px;
-                border-radius: 5px;
-            }}
-            QScrollBar::handle:horizontal {{
-                background-color: rgba(138, 43, 226, 150);
-                min-width: 20px;
-                border-radius: 5px;
-            }}
-            QScrollBar::handle:horizontal:hover {{
-                background-color: rgba(154, 59, 242, 180);
-            }}
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
-                width: 0px;
-            }}
-            QSplitter::handle {{
-                background-color: rgba(138, 43, 226, 50);
-                width: 2px;
-            }}
-            QSplitter::handle:hover {{
-                background-color: {COLOR_PRIMARY};
-            }}
-        """)
+        self.setStyleSheet(self.generate_stylesheet())
 
         # Dictionary to store all accounts by file
         self.all_db_accounts = {}  # Format: {filename: {account_name: password}}
@@ -406,49 +217,24 @@ class AccountManager(QWidget):
         self.snowflake_timer.timeout.connect(self.update_snowflakes)
         self.snowflake_timer.start(20)
 
-        # Main layout with splitter for resizable panels
+        # Create UI
+        self.setup_ui()
+
+        # Initial search for database files
+        self.scan_for_database_files()
+
+    def setup_ui(self):
+        """Set up the UI components"""
+        # Main layout
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
 
-        # Create header for the app
-        header_panel = ModernPanel()
-        header_panel.setStyleSheet(f"""
-            ModernPanel {{
-                background-color: {COLOR_PANEL};
-                border-radius: 12px;
-                border: 1px solid rgba(80, 80, 100, 100);
-            }}
-            QLabel {{
-                background: transparent;
-            }}
-        """)
-        header_layout = QHBoxLayout(header_panel)
+        # Create header panel
+        self.header_panel = HeaderPanel()
+        main_layout.addWidget(self.header_panel)
 
-        app_title = QLabel("Vaultix Account Manager")
-        app_title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
-        app_title.setStyleSheet(
-            f"color: {COLOR_ACCENT}; background: transparent;")
-
-        # Title placed left side
-        header_layout.addWidget(app_title)
-        # Header layout with spacing
-        header_layout.addStretch()
-
-        # Status Label in header
-        self.status_label = QLabel()
-        self.status_label.setStyleSheet(
-            f"color: {COLOR_TEXT_SECONDARY}; font-style: italic; background: transparent;")
-        header_layout.addWidget(self.status_label)
-
-        # Toggle button placed right side
-        self.theme_toggle = IconButton(
-            QIcon(), "Toggle Dark/Light Mode", style="secondary")
-        self.theme_toggle.setText("🌙")
-        self.theme_toggle.setFixedSize(QSize(40, 40))
-        self.theme_toggle.clicked.connect(self.toggle_theme)
-        header_layout.addWidget(self.theme_toggle)
-
-        # Current database indicator with location button
+        # Database indicator and location button
         db_indicator_layout = QHBoxLayout()
         db_indicator_layout.setSpacing(5)
 
@@ -465,39 +251,39 @@ class AccountManager(QWidget):
         self.show_location_btn.clicked.connect(self.show_database_location)
         db_indicator_layout.addWidget(self.show_location_btn)
 
-        header_layout.addLayout(db_indicator_layout)
+        # Theme toggle button
+        self.theme_toggle = IconButton(
+            QIcon(), "Toggle Dark/Light Mode", style="secondary")
+        self.theme_toggle.setText("🌙")
+        self.theme_toggle.setFixedSize(QSize(40, 40))
+        self.theme_toggle.clicked.connect(self.toggle_theme)
+        db_indicator_layout.addWidget(self.theme_toggle)
 
-        main_layout.addWidget(header_panel)
+        # Add to header
+        self.header_panel.layout.addLayout(db_indicator_layout)
 
-        # Content splitter for left and right panels
-        content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        # Content splitter for main sections
         content_splitter = QSplitter(Qt.Orientation.Horizontal)
         content_splitter.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Left Panel
-        left_panel = ModernPanel()
-        self.left_panel = left_panel  # Store reference for theme updates
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(10, 10, 10, 10)
+        # LEFT PANE - Account Management
+        left_pane = QWidget()
+        left_layout = QVBoxLayout(left_pane)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(15)
 
-        # Database section using collapsible panel
-        db_collapsible = CollapsiblePanel("Database Management", expanded=True)
-        self.db_collapsible = db_collapsible  # Store reference for theme updates
+        # Database management panel
+        db_panel = SectionPanel("Database Management")
 
-        db_content_layout = QVBoxLayout()
-
-        # Database location/file management section
-        db_location_layout = QVBoxLayout()
-
-        # Dropdown for file selection with label
+        # Database selector
         self.db_file_selector = QComboBox()
         self.db_file_selector.setMinimumHeight(40)
         self.db_file_selector.currentIndexChanged.connect(
             self.change_database_file)
-        db_location_layout.addWidget(self.db_file_selector)
+        db_panel.add_widget(self.db_file_selector)
 
-        # Database management buttons
+        # Database action buttons
         db_buttons_layout = QHBoxLayout()
         db_buttons_layout.setSpacing(10)
 
@@ -514,97 +300,62 @@ class AccountManager(QWidget):
         self.del_db_button.clicked.connect(self.delete_database)
         db_buttons_layout.addWidget(self.del_db_button)
 
-        db_location_layout.addLayout(db_buttons_layout)
-        db_content_layout.addLayout(db_location_layout)
+        db_panel.add_layout(db_buttons_layout)
+        left_layout.addWidget(db_panel)
 
-        db_collapsible.add_layout(db_content_layout)
-        left_layout.addWidget(db_collapsible)
+        # Account list panel
+        account_panel = SectionPanel("Accounts")
 
-        # Accounts section using collapsible panel
-        accounts_collapsible = CollapsiblePanel("Accounts", expanded=True)
-        # Store reference for theme updates
-        self.accounts_collapsible = accounts_collapsible
-
-        accounts_content_layout = QVBoxLayout()
-
-        # Account list with larger size and enhanced styling
-        account_list_container = QScrollArea()
-        account_list_container.setWidgetResizable(True)
-        account_list_container.setStyleSheet(
-            "border: none; background: transparent;")
-        account_list_container.setMinimumHeight(250)  # Larger account list
-        account_list_container.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-        account_list_widget = QWidget()
-        account_list_layout = QVBoxLayout(account_list_widget)
-        account_list_layout.setContentsMargins(0, 0, 0, 0)
-
+        # Account list
         self.account_list = QListWidget()
+        self.account_list.setMinimumHeight(200)
         self.account_list.itemSelectionChanged.connect(
             self.display_account_details)
-        account_list_layout.addWidget(self.account_list)
+        account_panel.add_widget(self.account_list)
 
-        account_list_container.setWidget(account_list_widget)
-        accounts_content_layout.addWidget(account_list_container)
+        left_layout.addWidget(account_panel)
 
-        accounts_collapsible.add_layout(accounts_content_layout)
-        left_layout.addWidget(accounts_collapsible)
+        # Account add/edit panel
+        account_edit_panel = SectionPanel("Add/Edit Account")
 
-        # Add account section using collapsible panel
-        add_account_collapsible = CollapsiblePanel(
-            "Add/Edit Account", expanded=True)
-        # Store reference for theme updates
-        self.add_account_collapsible = add_account_collapsible
+        # Form layout for account fields
+        form_layout = QGridLayout()
+        form_layout.setColumnStretch(1, 1)
+        form_layout.setVerticalSpacing(10)
 
-        add_account_content_layout = QVBoxLayout()
-
-        # Input fields for new account
-        input_section = QFrame()
-        input_layout = QVBoxLayout(input_section)
-        input_layout.setContentsMargins(0, 0, 0, 0)
-
-        name_layout = QVBoxLayout()
+        # Account name
         name_label = QLabel("Account Name")
-        name_layout.addWidget(name_label)
-
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("Enter account name")
-        name_layout.addWidget(self.name_input)
-        input_layout.addLayout(name_layout)
+        form_layout.addWidget(name_label, 0, 0)
+        form_layout.addWidget(self.name_input, 0, 1)
 
-        # Add email field (optional)
-        email_layout = QVBoxLayout()
+        # Email
         email_label = QLabel("Email (Optional)")
-        email_layout.addWidget(email_label)
-
         self.email_input = QLineEdit()
         self.email_input.setPlaceholderText("Enter email address")
-        email_layout.addWidget(self.email_input)
-        input_layout.addLayout(email_layout)
+        form_layout.addWidget(email_label, 1, 0)
+        form_layout.addWidget(self.email_input, 1, 1)
 
-        # Add website field (optional)
-        website_layout = QVBoxLayout()
+        # Website
         website_label = QLabel("Website URL (Optional)")
-        website_layout.addWidget(website_label)
-
         self.website_input = QLineEdit()
         self.website_input.setPlaceholderText(
             "Enter website URL (e.g., https://example.com)")
-        website_layout.addWidget(self.website_input)
-        input_layout.addLayout(website_layout)
+        form_layout.addWidget(website_label, 2, 0)
+        form_layout.addWidget(self.website_input, 2, 1)
 
-        pass_layout = QVBoxLayout()
+        # Password
         pass_label = QLabel("Password")
-        pass_layout.addWidget(pass_label)
-
         self.pass_input = QLineEdit()
         self.pass_input.setPlaceholderText("Enter password")
         self.pass_input.setEchoMode(QLineEdit.EchoMode.Password)
-        pass_layout.addWidget(self.pass_input)
-        input_layout.addLayout(pass_layout)
+        form_layout.addWidget(pass_label, 3, 0)
+        form_layout.addWidget(self.pass_input, 3, 1)
 
-        # Account management buttons
+        account_edit_panel.add_layout(form_layout)
+
+        # Account action buttons
         account_buttons_layout = QHBoxLayout()
         account_buttons_layout.setSpacing(10)
 
@@ -620,100 +371,77 @@ class AccountManager(QWidget):
         self.del_button.clicked.connect(self.del_account)
         account_buttons_layout.addWidget(self.del_button)
 
-        input_layout.addLayout(account_buttons_layout)
-        add_account_content_layout.addWidget(input_section)
+        account_edit_panel.add_layout(account_buttons_layout)
+        left_layout.addWidget(account_edit_panel)
 
-        add_account_collapsible.add_layout(add_account_content_layout)
-        left_layout.addWidget(add_account_collapsible)
+        # RIGHT PANE - Account Details
+        right_pane = QWidget()
+        right_layout = QVBoxLayout(right_pane)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(15)
 
-        content_splitter.addWidget(left_panel)
+        # Account details panel
+        details_panel = SectionPanel("Account Details")
+        self.details_panel = details_panel
 
-        # Right Panel (Account Details)
-        right_panel = ModernPanel()
-        self.right_panel = right_panel  # Store reference for theme updates
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(10, 10, 10, 10)
-
-        self.details_label = QLabel("Account Details")
-        self.details_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        right_layout.addWidget(self.details_label)
-
-        # Container for details
-        details_container = QFrame()
-        self.details_container = details_container  # Store reference for theme updates
-        details_container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLOR_PANEL_LIGHTER};
-                border-radius: 8px;
-                padding: 5px;
-            }}
-        """)
-        details_container_layout = QVBoxLayout(details_container)
-
+        # Details view
         self.details_view = QTextEdit()
         self.details_view.setReadOnly(True)
         self.details_view.setStyleSheet(
             "border: none; background: transparent;")
-        details_container_layout.addWidget(self.details_view)
+        details_panel.add_widget(self.details_view)
 
-        right_layout.addWidget(details_container)
-
-        # Action buttons for details
+        # Action buttons
         details_buttons_layout = QHBoxLayout()
+        details_buttons_layout.setSpacing(10)
 
         self.copy_button = EnhancedButton("Copy Details", style="secondary")
         self.copy_button.clicked.connect(self.copy_details)
         details_buttons_layout.addWidget(self.copy_button)
 
-        # Website button
         self.website_button = EnhancedButton("Open Website", style="primary")
         self.website_button.clicked.connect(self.open_website)
         self.website_button.setVisible(False)  # Initially hidden
         details_buttons_layout.addWidget(self.website_button)
 
-        # Edit password button
         self.edit_button = EnhancedButton("Edit Password", style="primary")
         self.edit_button.clicked.connect(self.edit_password)
         details_buttons_layout.addWidget(self.edit_button)
 
-        right_layout.addLayout(details_buttons_layout)
+        details_panel.add_layout(details_buttons_layout)
+        right_layout.addWidget(details_panel)
 
-        # Password generator using collapsible panel
-        password_gen_collapsible = CollapsiblePanel(
-            "Password Generator", expanded=True)
-        # Store reference for theme updates
-        self.password_gen_collapsible = password_gen_collapsible
+        # Password generator panel
+        password_panel = SectionPanel("Password Generator")
 
-        password_gen_content_layout = QVBoxLayout()
-
-        password_gen_buttons = QHBoxLayout()
+        # Generator buttons
+        password_buttons_layout = QHBoxLayout()
+        password_buttons_layout.setSpacing(10)
 
         self.gen_simple_button = EnhancedButton(
             "Generate Simple", style="secondary")
         self.gen_simple_button.clicked.connect(
             lambda: self.generate_password(simple=True))
-        password_gen_buttons.addWidget(self.gen_simple_button)
+        password_buttons_layout.addWidget(self.gen_simple_button)
 
         self.gen_strong_button = EnhancedButton(
             "Generate Strong", style="primary")
         self.gen_strong_button.clicked.connect(
             lambda: self.generate_password(simple=False))
-        password_gen_buttons.addWidget(self.gen_strong_button)
+        password_buttons_layout.addWidget(self.gen_strong_button)
 
-        password_gen_content_layout.addLayout(password_gen_buttons)
+        password_panel.add_layout(password_buttons_layout)
+        right_layout.addWidget(password_panel)
 
-        password_gen_collapsible.add_layout(password_gen_content_layout)
-        right_layout.addWidget(password_gen_collapsible)
-
-        content_splitter.addWidget(right_panel)
+        # Add panes to splitter
+        content_splitter.addWidget(left_pane)
+        content_splitter.addWidget(right_pane)
 
         # Set the initial split ratio (40% left, 60% right)
         content_splitter.setSizes([400, 600])
-        main_layout.addWidget(content_splitter)
-        main_layout.setStretchFactor(content_splitter, 1)
 
-        # Initial search for database files
-        self.scan_for_database_files()
+        # Add splitter to main layout
+        main_layout.addWidget(content_splitter)
 
     def toggle_theme(self):
         self.current_theme = "light" if self.current_theme == "dark" else "dark"
@@ -815,29 +543,6 @@ class AccountManager(QWidget):
         try:
             self.setStyleSheet(self.generate_stylesheet())
 
-            # Update ModernPanel styles
-            self.left_panel.update_style(COLOR_PANEL)
-            self.right_panel.update_style(COLOR_PANEL)
-
-            # Update details container
-            self.details_container.setStyleSheet(f"""
-                QFrame {{
-                    background-color: {COLOR_PANEL_LIGHTER};
-                    border-radius: 8px;
-                    padding: 5px;
-                }}
-            """)
-
-            # Update collapsible panels
-            self.db_collapsible.update_panel_color(COLOR_PANEL)
-            self.accounts_collapsible.update_panel_color(COLOR_PANEL)
-            self.add_account_collapsible.update_panel_color(COLOR_PANEL)
-            self.password_gen_collapsible.update_panel_color(COLOR_PANEL)
-
-            # Update buttons
-            for widget in self.findChildren(ModernButton):
-                widget.update_style()
-
             # Make sure current account details are displayed with new colors
             self.display_account_details()
 
@@ -908,7 +613,7 @@ class AccountManager(QWidget):
                     found_files.append((filename, len(accounts)))
                     self.all_db_accounts[filename] = accounts
 
-    # Add found files to dropdown
+        # Add found files to dropdown
         if found_files:
             for file, count in sorted(found_files):
                 self.db_file_selector.addItem(f"{file} ({count} accounts)")
@@ -987,8 +692,7 @@ class AccountManager(QWidget):
                         break
 
         # Update the current database indicator in header
-        self.current_db_indicator.setText(
-            f"Current: {self.current_db_file}")
+        self.current_db_indicator.setText(f"Current: {self.current_db_file}")
 
         # Load accounts for current file
         self.load_account_list()
@@ -1173,6 +877,7 @@ class AccountManager(QWidget):
         """
 
     def init_snowflakes(self):
+        """Initialize the snowflake animation elements"""
         width = self.width()
         height = self.height()
         self.snowflakes = [
@@ -1186,10 +891,12 @@ class AccountManager(QWidget):
         ]
 
     def resizeEvent(self, event):
+        """Handle window resize events"""
         super().resizeEvent(event)
         self.init_snowflakes()
 
     def paintEvent(self, event):
+        """Paint event for background and special effects"""
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -1208,6 +915,7 @@ class AccountManager(QWidget):
                 QPoint(int(flake.x), int(flake.y)), flake.size, flake.size)
 
     def update_snowflakes(self):
+        """Update snowflake positions for animation"""
         for flake in self.snowflakes:
             flake.fall()
         self.update()
@@ -1221,8 +929,8 @@ class AccountManager(QWidget):
         else:
             color = COLOR_STATUS_INFO
 
-        self.status_label.setText(message)
-        self.status_label.setStyleSheet(
+        self.header_panel.status_label.setText(message)
+        self.header_panel.status_label.setStyleSheet(
             f"color: {color}; font-style: italic; background: transparent;")
 
         # Clear any existing animation timer
@@ -1233,7 +941,7 @@ class AccountManager(QWidget):
         if status_type == "success" or status_type == "error":
             self.status_animation = QTimer(self)
             self.status_animation.timeout.connect(
-                lambda: self.status_label.setText(""))
+                lambda: self.header_panel.status_label.setText(""))
             self.status_animation.setSingleShot(True)
             self.status_animation.start(3000)  # 3 seconds
 
@@ -1425,7 +1133,7 @@ class AccountManager(QWidget):
         selected_items = self.account_list.selectedItems()
         if not selected_items:
             self.details_view.clear()
-            self.details_label.setText("Account Details")
+            self.details_panel.title_label.setText("Account Details")
             self.website_button.setVisible(False)
             self.current_website_url = None
             return
@@ -1479,7 +1187,8 @@ class AccountManager(QWidget):
             """)
 
             # Update header
-            self.details_label.setText(f"Account Details: {account_name}")
+            self.details_panel.title_label.setText(
+                f"Account Details: {account_name}")
 
     def open_website(self):
         """Open the website URL in the default browser"""

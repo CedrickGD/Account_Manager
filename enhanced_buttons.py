@@ -1,7 +1,7 @@
 # enhanced_buttons.py
 from PyQt6.QtWidgets import QPushButton, QGraphicsDropShadowEffect, QLabel
 from PyQt6.QtGui import QColor, QFont, QIcon
-from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, pyqtProperty, QRect
+from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, pyqtProperty, QRect, QTimer
 
 
 class EnhancedButton(QPushButton):
@@ -139,7 +139,6 @@ class EnhancedButton(QPushButton):
         self.update_style()
 
         # Reset color after delay
-        from PyQt6.QtCore import QTimer
         QTimer.singleShot(duration, lambda: self._reset_color(original_color))
 
     def _reset_color(self, color):
