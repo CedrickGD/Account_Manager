@@ -2,7 +2,8 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QLineEdit, QListWidget, QMessageBox, QTextEdit,
     QComboBox, QListWidgetItem, QInputDialog, QGraphicsDropShadowEffect,
-    QFrame, QSplitter, QScrollArea, QFileDialog, QToolButton
+    # Add QSizePolicy here
+    QFrame, QSplitter, QScrollArea, QFileDialog, QToolButton, QSizePolicy
 )
 from PyQt6.QtGui import QPainter, QBrush, QColor, QFont, QIcon, QLinearGradient, QPen
 from PyQt6.QtCore import Qt, QTimer, QPoint, QSize, QPropertyAnimation, QEasingCurve, QRect, pyqtProperty, QUrl
@@ -251,6 +252,7 @@ class AccountManager(QWidget):
         super().__init__()
         self.setWindowTitle("Account Manager")
         self.setGeometry(100, 100, 1100, 700)  # Larger window for better UI
+        self.setMinimumSize(800, 500)  # Set a reasonable minimum size
 
         # Current theme tracking
         self.current_theme = "dark"
@@ -469,6 +471,9 @@ class AccountManager(QWidget):
 
         # Content splitter for left and right panels
         content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        content_splitter.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Left Panel
         left_panel = ModernPanel()
@@ -528,13 +533,14 @@ class AccountManager(QWidget):
         account_list_container.setStyleSheet(
             "border: none; background: transparent;")
         account_list_container.setMinimumHeight(250)  # Larger account list
+        account_list_container.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         account_list_widget = QWidget()
         account_list_layout = QVBoxLayout(account_list_widget)
         account_list_layout.setContentsMargins(0, 0, 0, 0)
 
         self.account_list = QListWidget()
-        self.account_list.setMinimumHeight(220)
         self.account_list.itemSelectionChanged.connect(
             self.display_account_details)
         account_list_layout.addWidget(self.account_list)
@@ -704,6 +710,7 @@ class AccountManager(QWidget):
         # Set the initial split ratio (40% left, 60% right)
         content_splitter.setSizes([400, 600])
         main_layout.addWidget(content_splitter)
+        main_layout.setStretchFactor(content_splitter, 1)
 
         # Initial search for database files
         self.scan_for_database_files()
