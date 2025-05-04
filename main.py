@@ -105,6 +105,10 @@ class ModernPanel(QFrame):
         shadow.setOffset(0, 5)
         self.setGraphicsEffect(shadow)
 
+        # Ensure the panel has a proper frame shape
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setFrameShadow(QFrame.Shadow.Raised)
+
     def update_style(self, panel_color):
         self.setStyleSheet(f"""
             ModernPanel {{
